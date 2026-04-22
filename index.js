@@ -2,7 +2,7 @@ const express = require('express')
 const app = express()
 const cors = require('cors');
 require('dotenv').config();
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const port = process.env.PORT || 3000;
 
 // middleware
@@ -45,12 +45,29 @@ async function run() {
         res.send(result)
     })
 
+    // get a parcel using id
+    app.get('/parcels/:parcelId', async (req, res) => {
+      const id = req.params.parcelId;
+      const query = {_id: new ObjectId(id)};
+      const result = await parcelCollections.findOne(query);
+      res.send(result);
+    })
+
     app.post('/parcels', async(req, res) => {
         const parcel = req.body;
         parcel.createdAt = new Date();
         const result = await parcelCollections.insertOne(parcel)
         res.send(result);
     })
+
+    // Parcel Delete API
+    app.delete('/parcels/:id', async (req,res) => {
+      const id = req.params.id;
+      const query = {_id: new ObjectId(id)}
+      const result = await parcelCollections.deleteOne(query);
+      res.send(result);
+    })
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
