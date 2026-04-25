@@ -9,13 +9,12 @@ const port = process.env.PORT || 3000;
 
 const crypto = require("crypto");
 
-function generateTrakingId(){
+function generateTrakingId() {
   const prefix = "PRCL";
-  const date = new Date().toISOString().slice(0,10).replace(/-/g, "");
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   const random = crypto.randomBytes(3).toString("hex").toUpperCase();
-  
-  return `${prefix}-${date}-${random}`;
 
+  return `${prefix}-${date}-${random}`;
 }
 
 // middleware
@@ -41,7 +40,7 @@ async function run() {
     // create DB
     const db = client.db("zapShiftDB");
     const parcelCollections = db.collection("parcels");
-    const paymentCollection = db.collection('payments');
+    const paymentCollection = db.collection("payments");
 
     // Parcels related API's
     app.get("/parcels", async (req, res) => {
@@ -92,11 +91,11 @@ async function run() {
           {
             // Provide the exact Price ID (for example, price_1234) of the product you want to sell
             price_data: {
-              currency: 'USD',
+              currency: "USD",
               unit_amount: amount,
               product_data: {
-                name: paymentInfo.parcelName
-              }
+                name: paymentInfo.parcelName,
+              },
             },
             quantity: 1,
           },
@@ -105,7 +104,7 @@ async function run() {
         mode: "payment",
         metadata: {
           parcelId: paymentInfo.parcelId,
-          parcelName: paymentInfo.parcelName
+          parcelName: paymentInfo.parcelName,
         },
         success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-canceled`,
@@ -113,48 +112,78 @@ async function run() {
 
       // res.redirect(303, session.url);
       // console.log(session);
-      res.send({url: session.url});
+      res.send({ url: session.url });
     });
 
-
     // Update payment status
-    app.patch('/payment-success', async (req, res) => {
+    app.patch("/payment-success", async (req, res) => {
       const sessionId = req.query.session_id;
 
       const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+      const transactionId = session.payment_intent;
+      const query = { transactionId: transactionId };
+      const paymentExist = await paymentCollection.findOne(query);
+      
+      if(paymentExist){
+        return res.send({message: "already exists",
+          transactionId,
+          trakingId: paymentExist.trakingId
+        })
+      }
+
       const trakingId = generateTrakingId();
 
-      if(session.payment_status === 'paid'){
+      if (session.payment_status === "paid") {
         const id = session.metadata.parcelId;
-        const query = { _id: new ObjectId(id) }
+        const query = { _id: new ObjectId(id) };
         const update = {
           $set: {
-            paymentStatus: 'paid',
-            trakingId: trakingId
-          }
-        }
+            paymentStatus: "paid",
+            trakingId: trakingId,
+          },
+        };
 
         const result = await parcelCollections.updateOne(query, update);
 
         const payment = {
-          amount: session.amount_total/100,
+          amount: session.amount_total / 100,
           currency: session.currency,
           customerEmail: session.customer_email,
           parcelId: session.metadata.parcelId,
           parcelName: session.metadata.parcelName,
           transactionId: session.payment_intent,
           paymentStatus: session.payment_status,
-          paidAt: new Date()
-        }
+          paidAt: new Date(),
+          trakingId: trakingId
+        };
 
-        if(session.payment_status === 'paid') {
+        if (session.payment_status === "paid") {
           const resultPayment = await paymentCollection.insertOne(payment);
-          res.send({success: true, modifyParcel: result, paymentInfo: resultPayment, trakingId: trakingId, transactionId: session.payment_intent })
+          res.send({
+            success: true,
+            modifyParcel: result,
+            paymentInfo: resultPayment,
+            trakingId: trakingId,
+            transactionId: session.payment_intent,
+          });
         }
-
       }
-      res.send({success: false})
+      res.send({ success: false });
+    });
+
+    // Get payments data
+    app.get('/payments', async(req, res) => {
+      const email = req.query.email;
+      const query = {}
+      if(email){
+        query.customerEmail = email
+      }
+      const cursor = paymentCollection.find(query);
+      const result = await cursor.toArray();
+      res.send(result);
     })
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
