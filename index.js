@@ -7,6 +7,14 @@ const stripe = require("stripe")(`${process.env.STRIPE_SECRET}`);
 
 const port = process.env.PORT || 3000;
 
+var admin = require("firebase-admin");
+
+var serviceAccount = require("./zap-shift-firebase-adminsdk.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+
 const crypto = require("crypto");
 
 function generateTrakingId() {
@@ -20,6 +28,27 @@ function generateTrakingId() {
 // middleware
 app.use(express.json());
 app.use(cors());
+
+const verifyFBToken = async(req, res, next) => {
+  // console.log(`headers in the midleware`, req.headers.authorization);
+  const token = req.headers.authorization;
+
+  if (!token) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+
+  try {
+    const idToken = token.split(' ')[1];
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    // console.log('decoded in the token: ', decoded);
+    req.decoded_email = decoded.email;
+    next();
+  }
+  
+  catch(err){
+    return res.status(401).send({message: 'unauthorized access'})
+  }
+};
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.etxtqbz.mongodb.net/?appName=Cluster0`;
 
@@ -41,6 +70,25 @@ async function run() {
     const db = client.db("zapShiftDB");
     const parcelCollections = db.collection("parcels");
     const paymentCollection = db.collection("payments");
+    const userCollection = db.collection("users");
+    const ridersCollection = db.collection("riders");
+
+    // User related apis
+    app.post('/users', async(req, res) => {
+      const user = req.body;
+      user.role = 'user';
+      user.createdAt = new Date();
+      const email = user.email;
+      const userExist = await userCollection.findOne({email});
+
+      if(userExist){
+        return res.send({message: "user already exist"})
+      }
+
+      const result = await userCollection.insertOne(user);
+      console.log(result);
+      res.send(result);
+    })
 
     // Parcels related API's
     app.get("/parcels", async (req, res) => {
@@ -124,12 +172,13 @@ async function run() {
       const transactionId = session.payment_intent;
       const query = { transactionId: transactionId };
       const paymentExist = await paymentCollection.findOne(query);
-      
-      if(paymentExist){
-        return res.send({message: "already exists",
+
+      if (paymentExist) {
+        return res.send({
+          message: "already exists",
           transactionId,
-          trakingId: paymentExist.trakingId
-        })
+          trakingId: paymentExist.trakingId,
+        });
       }
 
       const trakingId = generateTrakingId();
@@ -155,7 +204,7 @@ async function run() {
           transactionId: session.payment_intent,
           paymentStatus: session.payment_status,
           paidAt: new Date(),
-          trakingId: trakingId
+          trakingId: trakingId,
         };
 
         if (session.payment_status === "paid") {
@@ -173,13 +222,40 @@ async function run() {
     });
 
     // Get payments data
-    app.get('/payments', async(req, res) => {
+    app.get("/payments", verifyFBToken, async (req, res) => {
       const email = req.query.email;
-      const query = {}
-      if(email){
-        query.customerEmail = email
+      const query = {};
+      if (email) {
+        query.customerEmail = email;
+        
+        if(email !== req.decoded_email){
+          return res.status(403).send({message: 'forbidden access'})
+        }
       }
-      const cursor = paymentCollection.find(query);
+      const cursor = paymentCollection.find(query).sort({paidAt: -1});
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+
+    // Rider related api
+    app.post("/riders", async(req, res) => {
+      const rider = req.body;
+      rider.status = 'pending';
+      rider.createdAt = new Date();
+
+      const result = await ridersCollection.insertOne(rider);
+      res.send(result);
+
+    })
+
+    // Get riders data
+    app.get("/riders", async(req, res) => {
+      const query = {};
+      
+      if(req.query.status){
+        query.status = req.query.status;
+      }
+      const cursor = await ridersCollection.find(query);
       const result = await cursor.toArray();
       res.send(result);
     })
