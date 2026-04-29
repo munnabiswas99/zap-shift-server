@@ -72,6 +72,14 @@ async function run() {
     const ridersCollection = db.collection("riders");
 
     // User related apis
+
+    // Get User data from db
+    app.get('/users', async(req, res) => {
+      const result = await userCollection.find().toArray();
+      res.send(result);
+    })
+
+    // Post user data to db
     app.post("/users", async (req, res) => {
       const user = req.body;
       user.role = "user";
