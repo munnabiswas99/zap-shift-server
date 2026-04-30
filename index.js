@@ -96,6 +96,22 @@ async function run() {
       res.send(result);
     });
 
+    // Update user role
+    app.patch("/users/:id", async(req, res) => {
+      const id = req.params.id;
+      const role = req.body.role;
+      const query = {_id: new ObjectId(id)};
+
+      const updateDoc = {
+        $set:{
+          role: role
+        }
+      }
+
+      const result = await userCollection.updateOne(query, updateDoc);
+      res.send(result)
+    })
+
     // Parcels related API's
     app.get("/parcels", async (req, res) => {
       const query = {};
