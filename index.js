@@ -74,25 +74,31 @@ async function run() {
     // middle ware with database access
     const verifyAdmin = async (req, res, next) => {
       const email = req.decoded_email;
+      const query = { email };
+      const user = await userCollection.findOne(query);
+
+      if (!user || user.role !== "admin") {
+        return res.status(403).send({ message: "forbidden access" });
+      }
 
       next();
-    }
+    };
 
     // User related apis
 
     // Get User data from db
-    app.get('/users', async(req, res) => {
+    app.get("/users", async (req, res) => {
       const result = await userCollection.find().toArray();
       res.send(result);
-    })
+    });
 
     // Get user role
-    app.get("/users/:email/role", async(req, res) => {
+    app.get("/users/:email/role", async (req, res) => {
       const email = req.params.email;
-      const query = {email};
+      const query = { email };
       const user = await userCollection.findOne(query);
-      res.send({role: user?.role} || 'user');
-    })
+      res.send({ role: user?.role } || "user");
+    });
 
     // Post user data to db
     app.post("/users", async (req, res) => {
@@ -112,20 +118,20 @@ async function run() {
     });
 
     // Update user role
-    app.patch("/users/:id/role", verifyFBToken, async(req, res) => {
+    app.patch("/users/:id/role", verifyFBToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const role = req.body.role;
-      const query = {_id: new ObjectId(id)};
+      const query = { _id: new ObjectId(id) };
 
       const updateDoc = {
-        $set:{
-          role: role
-        }
-      }
+        $set: {
+          role: role,
+        },
+      };
 
       const result = await userCollection.updateOne(query, updateDoc);
-      res.send(result)
-    })
+      res.send(result);
+    });
 
     // Parcels related API's
     app.get("/parcels", async (req, res) => {
