@@ -71,6 +71,13 @@ async function run() {
     const userCollection = db.collection("users");
     const ridersCollection = db.collection("riders");
 
+    // middle ware with database access
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded_email;
+
+      next();
+    }
+
     // User related apis
 
     // Get User data from db
