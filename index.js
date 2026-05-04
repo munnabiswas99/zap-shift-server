@@ -105,7 +105,7 @@ async function run() {
     });
 
     // Update user role
-    app.patch("/users/:id", async(req, res) => {
+    app.patch("/users/:id/role", verifyFBToken, async(req, res) => {
       const id = req.params.id;
       const role = req.body.role;
       const query = {_id: new ObjectId(id)};
