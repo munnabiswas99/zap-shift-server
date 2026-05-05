@@ -71,7 +71,7 @@ async function run() {
     const userCollection = db.collection("users");
     const ridersCollection = db.collection("riders");
 
-    // middle ware with database access
+    // middleware with database access
     const verifyAdmin = async (req, res, next) => {
       const email = req.decoded_email;
       const query = { email };
@@ -303,7 +303,7 @@ async function run() {
     });
 
     // Update rider status
-    app.patch("/riders/:id", verifyFBToken, async (req, res) => {
+    app.patch("/riders/:id", verifyFBToken, verifyAdmin, async (req, res) => {
       const status = req.body.status;
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
@@ -328,6 +328,16 @@ async function run() {
       const result = await ridersCollection.updateOne(query, updateDoc);
       res.send(result);
     });
+
+    // Delete Rider API
+    app.delete("/riders/:id", verifyFBToken, verifyAdmin, async(req, res) => {
+      const id = req.params.id;
+      const query = {_id: new ObjectId(id)};
+
+      const result = await ridersCollection.deleteOne(query);
+      res.send(result);
+    })
+
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
