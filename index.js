@@ -88,7 +88,17 @@ async function run() {
 
     // Get User data from db
     app.get("/users", async (req, res) => {
-      const result = await userCollection.find().toArray();
+      const searchText = req.query.searchText;
+      console.log(searchText);
+      const query = {};
+      if(searchText){
+        // query.displayName = {$regex: searchText, $options: 'i'};
+        query.$or = [
+          {displayName: {$regex: searchText, $options: 'i'}},
+          {email: {$regex: searchText, $options: 'i'}},
+        ]
+      }
+      const result = await userCollection.find(query).sort({createdAt: -1}).limit(10).toArray();
       res.send(result);
     });
 
